@@ -20,17 +20,22 @@ public class MapScene : MonoBehaviour
 
     private Node GetPath(Node Current_Node)
     {
-        if (Current_Node.parent == null)
+        if (Current_Node == null)
         {
             Debug.Log("Its Null");
             return null;
         } else
         {
-            Debug.Log("Parent Found!");
-            Debug.DrawRay(Current_Node.position, Vector3.up * 10, Color.red, 100f);
+            Debug.DrawRay(Current_Node.position, Vector3.up * 10, Color.black, 100f);
             Bitches_here.Add(Current_Node);
-            Current_Node = Current_Node.parent;
-            return GetPath(Current_Node.parent);
+            if(Current_Node.parent == null)
+            {
+                return null;
+            } else
+            {
+                Current_Node = Current_Node.parent;
+                return GetPath(Current_Node.parent);
+            }   
         }
     }
 
@@ -50,6 +55,7 @@ public class MapScene : MonoBehaviour
             this.h = 0;
             this.g = 0;
             this.position = pos;
+            this.parent = parent;
         }	
     }
 
@@ -60,56 +66,46 @@ public class MapScene : MonoBehaviour
         FindPathBetween(StartPoint,EndPoint);
     }
 
+    void Update()
+    {
+        if (Input.GetButtonDown("Jump"))
+        {
+
+            Map();
+            FindPathBetween(StartPoint, EndPoint);
+        }
+    }
+
     public void Map(){        
         MappedPoints.Clear();
         for(float x=minX;x<maxX;){
            for(float y=minY;y<maxY;){
                 //Do raycasy at pos x,y(alias for actual z) and position down
-                Vector3 position = new Vector3(x,10,y);
-                bool registered = false;
-                RaycastHit hit;
-                if (Physics.Raycast(position,Vector3.down, out hit, Mathf.Infinity))
-                {                    
-                    if (hit.transform.gameObject.layer == layerMask) {
-                        if(checkSurrounding(position)){
-                            var newPos = new Vector3(hit.point.x,0f,hit.point.z);
-                            MappedPoints.Add(newPos);
-                            registered = true;
-                            //Debug.DrawRay(position,Vector3.down * hit.distance, Color.red,10f);
-                        }
-                    }                  
+                Vector3 position = new Vector3(x,2,y);
+
+                if(checkSurrounding(position)){
+                    var newPos = new Vector3(position.x,0f, position.z);
+                    MappedPoints.Add(newPos);
+
                 }
 
                 //Increment Y
-                if(registered){
-                    y+= accuracy;
-                } else {
-                    y+= accuracy/5f;
-                }
-                           
+                y += accuracy;
+                
            }
 
-           //increment X 
-           x+= accuracy;
+            //increment X 
+            x += accuracy;
            
         }
     }
     
     public bool checkSurrounding(Vector3 position){
-                
-        var colliding = Physics.CheckCapsule(new Vector3(position.x,0.5f,position.z), new Vector3(position.x,2,position.z), accuracy,9);
-        //Debug.DrawRay(position, Vector3.up * 15, Color.blue, 100f);
+        Vector3 Start_Point = new Vector3(position.x, 3f, position.z);
+        var colliding = Physics.CheckCapsule(Start_Point, new Vector3(position.x,2,position.z), 1.5f);
         return !colliding;
     }
 
-    
-    void Update(){
-        if(Input.GetButtonDown("Jump")){
-
-            Map();
-            FindPathBetween(StartPoint,EndPoint);
-        }
-    }
     public void FindPathBetween(GameObject Start,GameObject End){
         if(Start == null || End == null){
             Debug.LogError("Start or End point are not set");
@@ -130,46 +126,57 @@ public class MapScene : MonoBehaviour
         List<Node> Closed_Nodes = new List<Node>();
 
         Open_Nodes.Add(Start_Point);
-        Node Current_Node = Start_Point;
+        Node Current_Node = Open_Nodes.First();
 
         int index = 0;
         while (Open_Nodes.Count() > 0){
 
-            Current_Node = Open_Nodes.OrderBy(node => node.f < Current_Node.f).First();
-     
+            Current_Node = Open_Nodes.First();
+            foreach (var node in Open_Nodes)
+            {
+                if (node.f < Current_Node.f)
+                {
+                    Current_Node = node;
+                }
+            }
+            
+
             Open_Nodes.Remove(Current_Node);
             Closed_Nodes.Add(Current_Node);
             
             //check goal condition //use approx
-            if(Current_Node == End_Point){
+            if(Vector3.Distance(Current_Node.position,End_Point.position) <= accuracy)
+            {
                 Debug.Log("NIGGA WE MADE IT");
-                return;
+                break;
             }
 
             //get points within {range} of Current_Node
             List<Node> Near_Current = new List<Node>();
-           
-            foreach (var point in MappedPoints.Where(n => Vector3.Distance(new Vector3(n.x, 0, n.z), Current_Node.position) < accuracy * 1.3f).ToList())
-            {
-                Near_Current.Add(new Node(point, Current_Node));
 
+            var search_distance = Mathf.Sqrt((accuracy * accuracy)*2);
+            foreach (var point in MappedPoints.Where(n => Vector3.Distance(n, Current_Node.position) <= search_distance).ToList())
+            {
+                Near_Current.Add(new Node(point, Current_Node));         
             }
 
-            foreach (Node node in Near_Current){
+            foreach (Node node in Near_Current) {
 
-                node.parent = Current_Node;
-                if (Closed_Nodes.Any(n=>n.position == node.position)){
+                if (Closed_Nodes.Any(n => n.position == node.position)) {
                     continue;
-                }
-
+                }            
+            
                 node.g = Current_Node.g + 1;
                 node.h = Vector3.Distance(node.position, End_Position);
-                node.f = node.g + node.h;
+                node.f = node.g + node.h;                
 
-                if (Open_Nodes.Any(x => x == node && x.g > node.g)){
+                if (Open_Nodes.Any(x => x.position == node.position && node.g > x.g))
+                {
                     continue;
                 }
-                              
+
+                Open_Nodes.RemoveAll(x => x.position == node.position);
+
                 Open_Nodes.Add(node);
                 index++;
                 if (index > 1000) break;
